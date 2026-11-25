@@ -1,49 +1,24 @@
-# P<编号> <题目名称>
+# P<number> <Problem title>
 
-- **负责人**：待分配
-- **状态**：未开始
-- **参考**：`mysql/queries.sql` 的相关章节（只作参考，应用里的查询要自己写）
+- **Owner**: Unassigned
+- **Status**: Not started
 
-## 1. 业务问题
+## 1. Business Question
 
-一两句话说清楚谁想知道什么。
+One or two sentences: who wants to know what.
 
-## 2. 设计目标
+## 2. Data Needed
 
-编号列出 3–5 条，每条可以被检查。例如：
+Describe in words what the single query must return: one row per what, which columns, and the optional parameters. Do not put SQL here; the owner writes it in the Python module.
 
-1. 输入参数是什么，缺省时怎样处理。
-2. 只统计哪些状态或哪些行。
-3. 分析要算出哪些指标，指标的定义是什么。
-4. 错误输入时的行为（报错、退出码、提示）。
+## 3. Python Analysis
 
-## 3. 涉及的表
+Bullets: the metrics Python computes from the returned rows, the output, and the error behavior (message, exit status). A zero denominator prints `-`.
 
-列出表名和用到的主要列。
+## 4. Expected Results (Seed Data, verified)
 
-## 4. 嵌入查询
+Numbers checked on the sandbox after `./mysql/reset.sh --load`.
 
-至少 3 条，全部参数化（PyMySQL 用 `%s`），不拼接用户输入。
+## 5. Acceptance Criteria
 
-| 编号 | 用途 | 参数 | 主要表 | 返回列 |
-| --- | --- | --- | --- | --- |
-| Q1 | | | | |
-| Q2 | | | | |
-| Q3 | | | | |
-
-## 5. 分析与输出
-
-- Python 侧做哪些聚合（计数、求和、平均、最小、最大、比例、排序）。
-- 输出格式（表格、摘要行），以及退出码。
-
-## 6. 结果预期（种子数据）
-
-以 `./mysql/reset.sh --load` 之后的种子数据为准。每个数字都应能用一条 SQL 核对。
-
-## 7. 验收标准
-
-可以写成测试的检查项，例如“各分组计数之和等于总数”。
-
-## 8. 不做的事
-
-明确写出本题不包括什么，避免范围蔓延。
+Three or four checks that can become tests, for example "the group counts add up to the total".

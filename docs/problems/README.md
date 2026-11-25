@@ -1,32 +1,34 @@
-# 课程应用题目（MySQL 数据分析）
+# Course Application Problems (MySQL Data Analysis)
 
-课程要求：用 Python 做一个应用，访问 MySQL 数据库，应用中嵌入至少 3 条查询取回数据，并基于取回的数据做简单分析。不要求建模。所有题目都用 Python 实现（PyMySQL），不使用 R。
+Course requirement: build a Python application that connects to a MySQL database, embeds at least 3 queries that retrieve data, and performs simple analysis on the retrieved data. Modeling is not required. All problems are implemented in Python (PyMySQL); R is not used.
 
-这里给出 6 个题目，每人负责 2 个。每个题目都说明了设计目标和结果预期，结果预期以 `ie6700 load` 导入的种子数据为准。题目文件按 [TEMPLATE.md](TEMPLATE.md) 编写，模板保留，以后加题也用它。
+Six problems are given here, and each person owns 2. Every problem states its design goals and expected results, and the expected results are based on the seed data loaded by `ie6700 load`. Problem files follow [TEMPLATE.md](TEMPLATE.md). The template is kept so that new problems can use it later.
 
-## 题目与分工
+To implement and verify a problem, follow [GUIDE.md](GUIDE.md).
 
-分工是建议，可以直接改下表。
+## Problems and Assignments
 
-| 编号 | 题目 | 涉及的子系统 | 负责人 | 状态 |
+The assignments are suggestions and can be edited directly in the table below.
+
+| ID | Problem | Subsystems involved | Owner | Status |
 | --- | --- | --- | --- | --- |
-| [P1](P1-search-and-price.md) | 商品搜索与价格概览 | 商品与发现 | Kun Yu | 未开始 |
-| [P2](P2-seller-report.md) | 卖家经营报告 | 商品、交易、评价 | Eduardo Gonzalez | 未开始 |
-| [P3](P3-request-funnel.md) | 购买请求转化漏斗 | 购买请求、订单 | Yuan Xia | 未开始 |
-| [P4](P4-pickup-and-cross-campus.md) | 取货点与跨校园交易 | 取货点、校园 | Kun Yu | 未开始 |
-| [P5](P5-messaging-activity.md) | 会话与消息活跃度 | 消息 | Eduardo Gonzalez | 未开始 |
-| [P6](P6-trust-and-safety.md) | 评价与举报的信任分析 | 评价、举报 | Yuan Xia | 未开始 |
+| [P1](P1-search-and-price.md) | Item search and price overview | Items and discovery | Kun Yu | Not started |
+| [P2](P2-seller-report.md) | Seller performance report | Items, transactions, reviews | Eduardo Gonzalez | Not started |
+| [P3](P3-request-funnel.md) | Purchase request conversion funnel | Purchase requests, orders | Yuan Xia | Not started |
+| [P4](P4-pickup-and-cross-campus.md) | Pickup points and cross-campus transactions | Pickup points, campuses | Kun Yu | Not started |
+| [P5](P5-messaging-activity.md) | Conversation and message activity | Messaging | Eduardo Gonzalez | Not started |
+| [P6](P6-trust-and-safety.md) | Trust analysis of reviews and reports | Reviews, reports | Yuan Xia | Not started |
 
-## 所有题目共同遵守的要求
+## Requirements Shared by All Problems
 
-1. **嵌入查询**：每题至少 3 条查询，全部参数化（PyMySQL 的 `%s`），不拼接用户输入。
-2. **分析步骤**：每题都要在 Python 里对取回的数据做聚合或计算（计数、求和、平均、比例、排序），不能只打印原始行。
-3. **只读**：应用只执行 `SELECT`，不修改数据库，也不修改 `mysql/` 下的任何文件。
-4. **不做建模**：只用简单统计，不做机器学习或预测。
-5. **连接配置**：复用 `ie6700` 的配置（`DATABASE_URL`，见仓库 README）。建议代码放在 `src/ie6700/analytics/`，每题一个模块，负责人可以调整。
-6. **预期可核对**：每题的结果预期都能用一条 SQL 在沙箱上核对；题目的验收标准里写明了检查方法。
-7. **与 `queries.sql` 的关系**：`mysql/queries.sql` 是 MySQL 里程碑的文件，可以参考其中的同类查询，但应用里的查询要由题目自己写，不能直接调用这个文件。
+1. **One complex query per problem**: each problem is built around a single, parameterized `SELECT` (CTEs, joins, window functions or aggregates as needed). The problem files only state the problem and the data needed; the owner writes the SQL in the Python module. Parameters use PyMySQL `%s`; never concatenate user input. The course requirement of at least 3 embedded queries is met by the project as a whole (6 problems, 6 queries), and each owner's two problems give two.
+2. **Analysis in Python**: the query returns summary rows, and Python computes the problem's metrics from them (ratios, averages, rankings). Printing raw rows alone is not enough.
+3. **Read-only**: only `SELECT`; never modify the database or any file under `mysql/`.
+4. **No modeling**: simple statistics only.
+5. **Connection configuration**: reuse the `ie6700` configuration (`DATABASE_URL`, see the repository README). Code goes in `src/ie6700/analytics/`, one module per problem.
+6. **Verified expectations**: every number in a problem file was checked on the sandbox with SQL. The owner re-checks it with the module's own query, and the integration tests assert it.
+7. **Relationship to `queries.sql`**: `mysql/queries.sql` belongs to the MySQL milestone. Consult it if useful, but write the application's query yourself and do not call that file.
 
-## 数据基准
+## Data Baseline
 
-预期数字是在 2026-11-24 的沙箱上核对的（`./mysql/reset.sh --load` 之后，`seattle_marketplace` 的 23 张表）。如果种子数据改动，题目文件中的预期数字也要同步更新。
+The expected numbers were verified on the sandbox on 2026-11-24 (after `./mysql/reset.sh --load`, the 23 tables of `seattle_marketplace`). If the seed data changes, the expected numbers in the problem files must be updated as well.
