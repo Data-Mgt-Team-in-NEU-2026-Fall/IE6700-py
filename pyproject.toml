@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ie6700"
+dynamic = ["version"]
+description = "Load, query and check the IE6700 course MySQL database from its SQL files."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "PyMySQL>=1.1",
+    "cryptography>=42",
+    "python-dotenv>=1.0",
+    "tabulate>=0.9",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[project.scripts]
+ie6700 = "ie6700.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "ie6700.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

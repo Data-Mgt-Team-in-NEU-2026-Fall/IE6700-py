@@ -1,0 +1,58 @@
+name: SQL validation
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  sql-validation:
+    name: Load, query and check the course SQL (MySQL 8.4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Throwaway credentials for a service container that only lives for this job.
+      # No repository secrets are needed, so pull requests from forks run too.
+      MYSQL_ROOT_PASSWORD: ie6700_ci_root
+      DATABASE_URL: mysql://root:ie6700_ci_root@127.0.0.1:3306/seattle_marketplace
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ie6700_ci_root
+          TZ: UTC
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -pie6700_ci_root --silent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 40
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Create .venv and install the project
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -e ".[test]"
+
+      - name: Load the course database
+        run: .venv/bin/ie6700 load
+
+      - name: Run queries.sql
+        run: .venv/bin/ie6700 queries
+
+      - name: Run the delete-rule tests
+        run: .venv/bin/ie6700 test
+
+      - name: Assert the expected results
+        run: .venv/bin/python -m pytest tests/integration -v

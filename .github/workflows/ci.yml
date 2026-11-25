@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  install-and-unit-tests:
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.10", "3.13"]
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # No DATABASE_URL is set here, so the integration tests are skipped.
+      - name: Create .venv and install (Linux and macOS)
+        if: runner.os != 'Windows'
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -e ".[test]"
+
+      - name: Create .venv and install (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          .\.venv\Scripts\python.exe -m pip install --upgrade pip
+          .\.venv\Scripts\python.exe -m pip install -e ".[test]"
+
+      - name: CLI starts (Linux and macOS)
+        if: runner.os != 'Windows'
+        run: |
+          .venv/bin/ie6700 --help
+          .venv/bin/python -m ie6700 --help
+
+      - name: CLI starts (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\.venv\Scripts\ie6700.exe --help
+          .\.venv\Scripts\python.exe -m ie6700 --help
+
+      - name: Unit tests (Linux and macOS)
+        if: runner.os != 'Windows'
+        run: .venv/bin/python -m pytest tests -v
+
+      - name: Unit tests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\.venv\Scripts\python.exe -m pytest tests -v
