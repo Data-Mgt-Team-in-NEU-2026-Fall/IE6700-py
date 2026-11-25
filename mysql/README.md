@@ -1,207 +1,207 @@
-# MySQL 本地测试环境
+# MySQL Local Test Environment
 
-这一阶段把同学提供的两套 SQL 合并成一个符合 `RelationalModel.md` 的建库脚本，并准备样例数据和独立的 MySQL Docker 测试节点。
-启动和 reset 都只初始化 MySQL 自带的系统数据库，不会自动建库或导入数据；建库和导入见下文"导入"。
+This phase merges the two SQL sets provided by teammates into one schema script that conforms to `RelationalModel.md`, and prepares sample data and a standalone MySQL Docker test node.
+Starting and resetting initialize only MySQL's built-in system databases; they do not create the database or import data automatically. For creating the database and importing, see "Import" below.
 
-## 文件结构
+## File Structure
 
 ```text
 03 MySQL Implementation/
-├── marketplace.sql         # 合并后的建库脚本（23 张表，只含结构）
-├── queries.sql             # 常用查询，按用例编号分组
-├── delete_rules.sql        # 删除规则测试（27 条，输出 PASS/FAIL）
-├── db.sh                   # 在容器里导入、查询、测试、进入客户端
+├── marketplace.sql         # Merged schema script (23 tables, structure only)
+├── queries.sql             # Common queries, grouped by use-case number
+├── delete_rules.sql        # Delete-rule tests (27 checks, output PASS/FAIL)
+├── db.sh                   # Import, query, test, and open a client inside the container
 ├── finals/
-│   └── MySQL Implementation.pdf   # 本阶段的 PDF 交付物
-├── seed/                   # 样例数据，按编号顺序导入
-│   ├── 01_identity.sql                  # 校园、角色、用户（改编自 archive/02_data.sql）
-│   ├── 02_marketplace.sql               # 商品、购买请求、取货点、订单（新写）
-│   └── 03_messaging_reviews_reports.sql # 消息、评价、举报（改编自 archive/02_data.sql）
-├── archive/                # 同学提供的原件，已归档，内容不再修改
+│   └── MySQL Implementation.pdf   # PDF deliverable for this phase
+├── seed/                   # Sample data, imported in numeric order
+│   ├── 01_identity.sql                  # Campuses, roles, users (adapted from archive/02_data.sql)
+│   ├── 02_marketplace.sql               # Items, purchase requests, pickup points, orders (newly written)
+│   └── 03_messaging_reviews_reports.sql # Messages, reviews, reports (adapted from archive/02_data.sql)
+├── archive/                # Originals provided by teammates, archived, no longer modified
 │   ├── 01_schema.sql
 │   ├── 02_data.sql
 │   ├── 03_queries.sql
 │   └── seattle_marketplace_updated_with_sample_data.sql
 ├── docker-compose.yaml
-├── reset.sh                # 重置容器和数据卷，--load 同时导入数据
-├── import_local.sh         # 非 Docker：一次性导入到本地 MySQL 8.x 实例
+├── reset.sh                # Reset the container and data volume; --load also imports data
+├── import_local.sh         # Non-Docker: one-shot import into a local MySQL 8.x instance
 ├── .env.example
 └── .gitignore
 ```
 
-原件来自同学提供的原始 SQL 文件，原样放在 `archive/`，以只读方式挂载到容器的 `/workspace/archive/`。
-`marketplace.sql` 和 `seed/` 同样只读挂载到 `/workspace/`。
+The originals come from the raw SQL files provided by teammates. They are kept unchanged in `archive/` and mounted read-only into the container at `/workspace/archive/`.
+`marketplace.sql` and `seed/` are likewise mounted read-only at `/workspace/`.
 
-## 合并说明
+## Merge Notes
 
-原来两套脚本不能依次运行：`01_schema.sql` 建 `secondhand_marketplace`（用户、消息、评价、举报），
-`seattle_marketplace_updated_with_sample_data.sql` 建 `seattle_marketplace`（商品、购买请求、订单），
-两边都有 `Campus`、`User`，角色表一个叫 `UserRole`、一个叫 `Role`，id 类型也不同。`marketplace.sql` 的处理：
+The two original script sets could not be run one after the other: `01_schema.sql` creates `secondhand_marketplace` (users, messages, reviews, reports),
+and `seattle_marketplace_updated_with_sample_data.sql` creates `seattle_marketplace` (items, purchase requests, orders).
+Both define `Campus` and `User`, one calls the role table `UserRole` and the other `Role`, and the id types differ. What `marketplace.sql` does:
 
-- 统一成 `seattle_marketplace` 库，`Campus`、`User`、`Role` 用 seattle 版，`UserHasRole` 引用 `Role`，所有 id 为 `INT`。
-- 01 里只写成注释的跨图关联改成真实外键（会话、举报、评价指向商品和订单）。
-- `Report` 按设计增加 `resolutionNote`、`handledAt`、`handledById`，`status` 限定为
-  `RECEIVED`、`UNDER_REVIEW`、`RESOLVED`、`DISMISSED`；`reviewDate`、`reportDate` 为 `DATE`。
-- 保留原件中设计没有写、但有用的唯一约束：`uq_email`、`uq_roleName`、`uq_buyer_transaction`、`uq_seller_transaction`。
+- Unify on the `seattle_marketplace` database; `Campus`, `User`, and `Role` use the seattle version, `UserHasRole` references `Role`, and all ids are `INT`.
+- Cross-graph relationships that were only written as comments in 01 become real foreign keys (conversations, reports, and reviews pointing to items and orders).
+- `Report` gains `resolutionNote`, `handledAt`, and `handledById` as designed, and `status` is restricted to
+  `RECEIVED`, `UNDER_REVIEW`, `RESOLVED`, `DISMISSED`; `reviewDate` and `reportDate` are `DATE`.
+- Useful unique constraints from the originals that the design does not mention are kept: `uq_email`, `uq_roleName`, `uq_buyer_transaction`, `uq_seller_transaction`.
 
-样例数据（共 23 张表、约 1000 行）：
+Sample data (23 tables, about 1000 rows in total):
 
-- `01_identity.sql`：由 `archive/02_data.sql` 改编。补 `emailDomain`、`accountStatus`（2 个用户为 `SUSPENDED`），`UserRole` 改 `Role`，`dateJoined` 改 `DATE`。
-- `02_marketplace.sql`（新写）：40 件商品、10 个分类、43 个购买请求、29 笔订单、10 个地址、28 个取货点。
-  取货点属于卖家：每个卖家都有自己常用的取货点，有的还有第二个（其中一个已关闭）；每笔订单使用该订单卖家自己的取货点。
-  订单 1–17、20–25 已完成，18、26、27 待取货，19、28、29 已取消；商品状态和订单状态对应（已完成为 `SOLD`，待取货为 `RESERVED`，已取消回到 `AVAILABLE`）。
-  每件在售商品至少有一个购买请求和收藏。
-- `03_messaging_reviews_reports.sql`：由 `archive/02_data.sql` 改编并补充，共 59 个会话、324 条消息、33 条评价、30 条举报。
-  对原数据的修正：
-  - 消息、会话、举报的时间不早于所涉商品和订单，也不早于用户加入时间；
-  - 每个会话都包含商品的卖家（原来缺的补了参与者和一条回复）；
-  - 评价的作者和被评人与订单的买家、卖家一致；原来没挂在任何订单上的评价 25–30，改为订单 20–25 的买家评价；
-  - 商品举报的举报人不是该商品的卖家，订单举报的举报人是该订单的买家或卖家；
-  - `Report.status`、`Report.reason`、`reviewStatus` 换成大写枚举值；`RECEIVED` 的处理字段都为空，`UNDER_REVIEW` 只有处理人，`RESOLVED`、`DISMISSED` 有处理人、时间和备注，处理人是管理员用户。
-  新增：每笔订单和 10 个待处理请求各一个会话，卖家评价 31–33，举报 25–30。
-- seattle 原件里的 2 个用户和 3 件商品样例与 `02_data.sql` 的用户编号冲突，没有导入；它们仍在 `archive/` 中。
+- `01_identity.sql`: adapted from `archive/02_data.sql`. Adds `emailDomain` and `accountStatus` (2 users are `SUSPENDED`), changes `UserRole` to `Role`, and changes `dateJoined` to `DATE`.
+- `02_marketplace.sql` (newly written): 40 items, 10 categories, 43 purchase requests, 29 orders, 10 addresses, 28 pickup points.
+  Pickup points belong to sellers: every seller has their own usual pickup point, and some have a second one (one of which is closed); every order uses the pickup point of that order's own seller.
+  Orders 1–17 and 20–25 are completed, 18, 26, and 27 are awaiting pickup, and 19, 28, and 29 are cancelled; item status matches order status (completed is `SOLD`, awaiting pickup is `RESERVED`, cancelled goes back to `AVAILABLE`).
+  Every available item has at least one purchase request and one favorite.
+- `03_messaging_reviews_reports.sql`: adapted from `archive/02_data.sql` and extended, with 59 conversations, 324 messages, 33 reviews, and 30 reports.
+  Corrections made to the original data:
+  - Message, conversation, and report times are not earlier than the item and order involved, nor earlier than the user's join date;
+  - Every conversation includes the item's seller (where missing, a participant and a reply were added);
+  - The author and subject of a review match the order's buyer and seller; reviews 25–30, which were not attached to any order, became buyer reviews for orders 20–25;
+  - The reporter of an item report is not the item's seller, and the reporter of an order report is the order's buyer or seller;
+  - `Report.status`, `Report.reason`, and `reviewStatus` use uppercase enum values; for `RECEIVED` all handling fields are empty, `UNDER_REVIEW` has only a handler, and `RESOLVED` and `DISMISSED` have a handler, a time, and a note, where the handler is an admin user.
+  Added: one conversation for each order and for each of the 10 pending requests, seller reviews 31–33, and reports 25–30.
+- The 2 users and 3 items in the seattle original were not imported because their user ids conflict with `02_data.sql`; they remain in `archive/`.
 
-## 查询
+## Queries
 
-`queries.sql` 按 `00 init/user-cases.md` 的用例编号组织，开头的参数用 `SET @变量` 设置，整份文件可直接运行（参数可以改）：
+`queries.sql` is organized by the use-case numbers in `00 init/user-cases.md`. The parameters at the top are set with `SET @variable`, and the whole file can be run as is (the parameters can be changed):
 
 ```bash
 ./db.sh queries
 ```
 
-| 部分 | 内容 |
+| Section | Content |
 | --- | --- |
-| 1 | 登录与个人记录：校园邮箱登录、我的商品、请求、订单、收藏、收到和写出的评价 |
-| 2 | 浏览与筛选（分类含子类、价格、校园、标签、关键词）、商品详情、收藏、购买请求 |
-| 3 | 卖家：待处理请求、常用交接地点、需要处理的商品 |
-| 4 | 会话：我的会话和是否可发言、消息列表、参与者、查找已有会话 |
-| 5 | 订单详情、缺少的评价、举报记录、管理员举报队列 |
-| 6 | 写入：发布商品、收藏、提购买请求、接受请求并生成订单、确认完成、取消订单、评价、举报、下架、处理举报、停用标签 |
-| 7 | 管理员概览：状态统计、按月活跃度、校园对比、热门卖家和分类、转化率、举报统计 |
-| 8 | 数据健康检查，每条应返回 0 |
+| 1 | Login and personal records: campus email login, my items, requests, orders, favorites, reviews received and written |
+| 2 | Browse and filter (category including subcategories, price, campus, tag, keyword), item detail, favorites, purchase requests |
+| 3 | Seller: pending requests, usual handoff locations, items needing action |
+| 4 | Conversations: my conversations and whether I can post, message list, participants, find an existing conversation |
+| 5 | Order detail, missing reviews, report history, admin report queue |
+| 6 | Writes: post an item, favorite, make a purchase request, accept a request and create an order, confirm completion, cancel an order, review, report, remove an item, handle a report, deactivate a tag |
+| 7 | Admin overview: status counts, monthly activity, campus comparison, popular sellers and categories, conversion rate, report statistics |
+| 8 | Data health checks, each of which should return 0 |
 
-第 6 部分的每个例子都放在 `START TRANSACTION … ROLLBACK` 中，运行后数据不变，只是自增编号会往后走；
-要保留某项改动，把 `ROLLBACK` 改成 `COMMIT`。评价方向：`BuyerReview` 是对买家的评价（卖家写），`SellerReview` 是对卖家的评价（买家写）。
+Every example in section 6 is wrapped in `START TRANSACTION … ROLLBACK`, so the data is unchanged after running and only the auto-increment counters move forward;
+to keep a change, replace `ROLLBACK` with `COMMIT`. Review direction: `BuyerReview` is a review of the buyer (written by the seller), and `SellerReview` is a review of the seller (written by the buyer).
 
-## 类型与枚举
+## Types and Enums
 
-课程项目只处理 ASCII 数据，服务器和数据库的字符集与排序规则统一为 `utf8mb4` / `utf8mb4_0900_ai_ci`
-（`docker-compose.yaml` 和 `CREATE DATABASE` 都显式写明）。邮箱和域名列保持原样。
+The course project handles only ASCII data. The server and database character set and collation are unified as `utf8mb4` / `utf8mb4_0900_ai_ci`
+(stated explicitly in both `docker-compose.yaml` and `CREATE DATABASE`). Email and domain columns are kept as they are.
 
-| 类别 | 列 | 类型 |
+| Category | Columns | Type |
 | --- | --- | --- |
-| 主键和外键 | 所有 `…Id` | `INT UNSIGNED` |
-| 金额 | `askingPrice`、`offeredPrice`、`agreedPrice` | `DECIMAL(8,2)`，最大 999,999.99 |
-| 小整数 | `rating`、`displayOrder` | `TINYINT UNSIGNED`（评分另有 1–5 的 CHECK） |
-| 年份 | `yearAcquired` | `YEAR` |
-| 布尔 | `activeStatus` | `BOOLEAN NOT NULL DEFAULT TRUE` |
-| 地址 | `state` / `zipCode` / `city` / 街道 | `CHAR(2)` / `VARCHAR(10)` / `VARCHAR(50)` / `VARCHAR(100)` |
-| 姓名和电话 | `firstName`、`lastName` / `phone` | `VARCHAR(50)` / `VARCHAR(20)` |
-| 名称 | 校园、分类、标签、角色、取货点、商品标题 | `VARCHAR(80)`、`(50)`、`(30)`、`(30)`、`(80)`、`(120)` |
-| 文本 | 商品描述、消息 / 评价、举报说明和处理备注 / 请求留言 / 分类和取货点说明 | `VARCHAR(2000)` / `(1000)` / `(500)` / `(255)`，不再使用 `TEXT` |
+| Primary and foreign keys | all `…Id` | `INT UNSIGNED` |
+| Money | `askingPrice`, `offeredPrice`, `agreedPrice` | `DECIMAL(8,2)`, maximum 999,999.99 |
+| Small integers | `rating`, `displayOrder` | `TINYINT UNSIGNED` (rating also has a 1–5 CHECK) |
+| Year | `yearAcquired` | `YEAR` |
+| Boolean | `activeStatus` | `BOOLEAN NOT NULL DEFAULT TRUE` |
+| Address | `state` / `zipCode` / `city` / street | `CHAR(2)` / `VARCHAR(10)` / `VARCHAR(50)` / `VARCHAR(100)` |
+| Name and phone | `firstName`, `lastName` / `phone` | `VARCHAR(50)` / `VARCHAR(20)` |
+| Names | campus, category, tag, role, pickup point, item title | `VARCHAR(80)`, `(50)`, `(30)`, `(30)`, `(80)`, `(120)` |
+| Text | item description, message / review, report description and handling note / request message / category and pickup point description | `VARCHAR(2000)` / `(1000)` / `(500)` / `(255)`; `TEXT` is no longer used |
 
-可以枚举的取值都用 `ENUM`，非法值会被拒绝，原来重复的状态 `CHECK` 已去掉：
+Values that can be enumerated use `ENUM`, so invalid values are rejected, and the duplicated status `CHECK` constraints have been removed:
 
-| 列 | 取值 | 默认值 |
+| Column | Values | Default |
 | --- | --- | --- |
-| `SecondhandItem.status` | `AVAILABLE`、`RESERVED`、`SOLD`、`REMOVED` | `AVAILABLE` |
-| `SecondhandItem.condition` | `NEW`、`LIKE_NEW`、`GOOD`、`FAIR`、`POOR` | 必须填写 |
-| `PurchaseRequest.status` | `PENDING`、`ACCEPTED`、`REJECTED` | `PENDING` |
-| `TransactionOrder.status` | `PENDING`、`COMPLETED`、`CANCELLED` | `PENDING` |
-| `User.accountStatus` | `ACTIVE`、`SUSPENDED` | `ACTIVE` |
-| `TransactionReview.reviewStatus` | `PUBLISHED`、`FLAGGED`、`REMOVED` | `PUBLISHED` |
-| `Report.status` | `RECEIVED`、`UNDER_REVIEW`、`RESOLVED`、`DISMISSED` | `RECEIVED` |
-| `Report.reason` | `SCAM`、`SPAM`、`INAPPROPRIATE_CONTENT`、`HARASSMENT`、`WRONG_DESCRIPTION`、`COUNTERFEIT`、`OTHER` | `OTHER` |
+| `SecondhandItem.status` | `AVAILABLE`, `RESERVED`, `SOLD`, `REMOVED` | `AVAILABLE` |
+| `SecondhandItem.condition` | `NEW`, `LIKE_NEW`, `GOOD`, `FAIR`, `POOR` | required |
+| `PurchaseRequest.status` | `PENDING`, `ACCEPTED`, `REJECTED` | `PENDING` |
+| `TransactionOrder.status` | `PENDING`, `COMPLETED`, `CANCELLED` | `PENDING` |
+| `User.accountStatus` | `ACTIVE`, `SUSPENDED` | `ACTIVE` |
+| `TransactionReview.reviewStatus` | `PUBLISHED`, `FLAGGED`, `REMOVED` | `PUBLISHED` |
+| `Report.status` | `RECEIVED`, `UNDER_REVIEW`, `RESOLVED`, `DISMISSED` | `RECEIVED` |
+| `Report.reason` | `SCAM`, `SPAM`, `INAPPROPRIATE_CONTENT`, `HARASSMENT`, `WRONG_DESCRIPTION`, `COUNTERFEIT`, `OTHER` | `OTHER` |
 
-注意：MySQL 里不带默认值的 `NOT NULL` 枚举，漏填时会悄悄取第一个值而不报错，
-所以 `condition` 写成可空枚举加 `CHECK (condition IS NOT NULL)`，漏填会报错，不会被当成 `NEW`。
-角色、分类、标签是会被维护的数据，仍然放在各自的表里，没有做成枚举。
+Note: in MySQL, a `NOT NULL` enum without a default silently takes its first value when omitted, instead of raising an error,
+so `condition` is written as a nullable enum plus `CHECK (condition IS NOT NULL)`; an omitted value raises an error and is not treated as `NEW`.
+Roles, categories, and tags are data that gets maintained, so they stay in their own tables and are not made into enums.
 
-## 删除规则
+## Delete Rules
 
-所有 36 个外键都写明 `ON DELETE`；`ON UPDATE` 保持默认的 `RESTRICT`（主键都是不会改的代理 id）。
-原则：历史数据和基础数据一律禁止删除，不再使用时改状态；只有"随父行存在、离开父行没有意义"的从属行才级联删除。
+All 36 foreign keys state `ON DELETE` explicitly; `ON UPDATE` stays at the default `RESTRICT` (the primary keys are surrogate ids that never change).
+Principle: history data and base data may never be deleted, and when something is no longer used its status is changed instead; only dependent rows that "exist because of the parent row and are meaningless without it" are deleted by cascade.
 
-| 规则 | 外键 | 原因 |
+| Rule | Foreign keys | Reason |
 | --- | --- | --- |
-| 禁止删除（`RESTRICT`，25 个） | 校园、角色、分类、标签、商品、购买请求、订单、地址、有消息的会话、评价和举报所引用的一切；用户被商品、请求、消息、评价、举报引用 | 交易、会话、评价、举报要保留供追溯；下架用 `REMOVED`，封禁用 `SUSPENDED`，标签用 `activeStatus = 0`，订单用 `CANCELLED` |
-| 级联删除（`CASCADE`，11 个） | 商品 → 图片、标签关联；商品 → 收藏；用户 → 收藏、角色关联、自己的取货点；空会话 → 参与者；评价 → `BuyerReview`/`SellerReview` 行；举报 → `ItemReport`/`TransactionReport` 行 | 这些行只因父行存在，没有父行就没有意义 |
+| Deletion forbidden (`RESTRICT`, 25) | Everything referenced by campuses, roles, categories, tags, items, purchase requests, orders, addresses, conversations that have messages, reviews, and reports; users referenced by items, requests, messages, reviews, and reports | Transactions, conversations, reviews, and reports must be kept for traceability; use `REMOVED` to take down an item, `SUSPENDED` to ban a user, `activeStatus = 0` for a tag, and `CANCELLED` for an order |
+| Cascade delete (`CASCADE`, 11) | item → images and tag associations; item → favorites; user → favorites, role associations, and their own pickup points; empty conversation → participants; review → `BuyerReview`/`SellerReview` rows; report → `ItemReport`/`TransactionReport` rows | These rows exist only because of the parent row and are meaningless without it |
 
-两个要点：取货点随用户级联，但被订单引用的取货点仍然禁止删除，所以用过的取货点不会丢；会话里有消息时不能删除，保证历史消息保留。
-`delete_rules.sql` 对每条规则做一次删除并判断结果，在事务里运行，最后回滚：
+Two key points: pickup points cascade with their user, but a pickup point referenced by an order still cannot be deleted, so a pickup point that has been used is never lost; a conversation that has messages cannot be deleted, which keeps the message history.
+`delete_rules.sql` runs one delete per rule and checks the outcome, inside a transaction that is rolled back at the end:
 
 ```bash
 ./db.sh test
 ```
 
-## 启动、重置和使用
+## Start, Reset, and Use
 
-数据库运行在 Docker 容器里，镜像为 `mysql:8.4`（8.x 长期支持版），宿主机不需要安装 MySQL。
-不想用 Docker 时，见下文"非 Docker 环境"。
-需要 Docker Engine、Docker Compose v2.20 或更高版本以及 Bash。所有命令在本目录执行：
+The database runs in a Docker container using the image `mysql:8.4` (an 8.x long-term support release), so MySQL does not need to be installed on the host.
+If you prefer not to use Docker, see "Non-Docker Environment" below.
+Docker Engine, Docker Compose v2.20 or later, and Bash are required. Run all commands in this directory:
 
 ```bash
-# 可选：自定义本地密码和端口。
+# Optional: customize the local password and port.
 cp .env.example .env
 
-# 重置并导入：删除旧容器和数据卷，启动 MySQL，在容器内导入建库脚本和样例数据。
+# Reset and import: remove the old container and data volume, start MySQL, and import the schema script and sample data inside the container.
 ./reset.sh --load
 
-./db.sh status     # 版本、表和行数
-./db.sh queries    # 运行 queries.sql
-./db.sh test       # 运行 delete_rules.sql，27 条规则各输出 PASS 或 FAIL
-./db.sh shell      # 进入容器里的 mysql 客户端（已选中 seattle_marketplace）
+./db.sh status     # Version, tables, and row counts
+./db.sh queries    # Run queries.sql
+./db.sh test       # Run delete_rules.sql; each of the 27 rules prints PASS or FAIL
+./db.sh shell      # Open the mysql client in the container (seattle_marketplace already selected)
 ```
 
-| 命令 | 作用 |
+| Command | Effect |
 | --- | --- |
-| `./reset.sh` | 重置为空的 MySQL（不建库、不导入） |
-| `./reset.sh --load` | 重置并导入 `marketplace.sql` 和 `seed/` |
-| `./db.sh load` | 向空的节点导入；库已存在时会报"表已存在"，先重置 |
-| `./db.sh queries` / `test` / `status` / `shell` | 查询、测试、状态、客户端 |
+| `./reset.sh` | Reset to an empty MySQL (no database created, nothing imported) |
+| `./reset.sh --load` | Reset and import `marketplace.sql` and `seed/` |
+| `./db.sh load` | Import into an empty node; if the database already exists you get a "table already exists" error, so reset first |
+| `./db.sh queries` / `test` / `status` / `shell` | Queries, tests, status, client |
 
-`marketplace.sql`、`seed/`、`queries.sql`、`delete_rules.sql`、`archive/` 以只读方式挂载到容器的 `/workspace/`，
-`db.sh` 直接读取容器里的文件，不经过宿主机。首次运行会下载 `mysql:8.4` 镜像。
-若数据卷是用其他版本（例如之前的 9.7）创建的，重置时会一并删除；MySQL 不能把数据目录降回旧版本，所以不要换镜像版本后复用旧卷。
+`marketplace.sql`, `seed/`, `queries.sql`, `delete_rules.sql`, and `archive/` are mounted read-only at `/workspace/` in the container,
+and `db.sh` reads the files inside the container directly, without going through the host. The first run downloads the `mysql:8.4` image.
+If the data volume was created with another version (for example the earlier 9.7), it is removed on reset; MySQL cannot downgrade a data directory to an older version, so do not change the image version and reuse an old volume.
 
-重置脚本固定操作 `neu-ie6700-mysql` Compose 项目：先检查 Docker、配置及所需镜像，
-再移除该项目的容器和 `mysql_data` 数据卷，重新启动 MySQL，并等待真实 SQL 健康检查通过。
-这会删除本测试节点中的所有数据库和数据；`archive/` 原件保留。脚本不执行全局 Docker 清理命令，也不处理其他 Compose 项目。
-脚本根据自身位置定位配置，也可以从仓库根目录运行：`"./03 MySQL Implementation/reset.sh"`。
+The reset script always operates on the `neu-ie6700-mysql` Compose project: it first checks Docker, the configuration, and the required image,
+then removes that project's container and `mysql_data` data volume, starts MySQL again, and waits for a real SQL health check to pass.
+This deletes all databases and data on this test node; the originals in `archive/` are kept. The script does not run any global Docker cleanup command and does not touch other Compose projects.
+The script locates its configuration from its own location, so it can also be run from the repository root: `"./03 MySQL Implementation/reset.sh"`.
 
-从宿主机连接：地址 `127.0.0.1:3307`，用户名 `root`，密码为 `.env.example` 中的本地测试密码；
-端口被占用时在 `.env` 里改 `MYSQL_PORT`。查看日志：`docker compose logs --tail 100 mysql`。
+To connect from the host: address `127.0.0.1:3307`, user `root`, and the local test password from `.env.example`;
+if the port is in use, change `MYSQL_PORT` in `.env`. To view logs: `docker compose logs --tail 100 mysql`.
 
-## 非 Docker 环境：导入本地 MySQL 8.x
+## Non-Docker Environment: Import into a Local MySQL 8.x
 
-已有本地 MySQL 8.x 服务器（8.0 及以上的 8.x 版本）时，可以不用 Docker，用 `import_local.sh` 一次性导入：
+If you already have a local MySQL 8.x server (any 8.x release from 8.0 up), you can skip Docker and import in one shot with `import_local.sh`:
 
 ```bash
-# 连接本地 127.0.0.1:3306，用户 root；密码未设置时脚本会提示输入一次。
+# Connect to local 127.0.0.1:3306 as root; if no password is set, the script prompts for it once.
 ./import_local.sh
 
-# 指定主机、端口、用户；用 MYSQL_PWD 传入密码（不会出现在进程参数里）。
-MYSQL_PWD='你的密码' ./import_local.sh -h 127.0.0.1 -P 3306 -u root
+# Specify host, port, and user; pass the password with MYSQL_PWD (it does not appear in the process arguments).
+MYSQL_PWD='your-password' ./import_local.sh -h 127.0.0.1 -P 3306 -u root
 
-# 库已存在时替换它（会删除 seattle_marketplace 里的全部数据）。
+# Replace the database if it already exists (this deletes all data in seattle_marketplace).
 ./import_local.sh --drop-existing
 ```
 
-脚本需要本机有 `mysql` 客户端。执行顺序与 `db.sh load` 相同：先 `marketplace.sql`，再 `seed/` 三个文件，
-最后检查库里是否恰好有 23 张基础表。它做了以下保护：
+The script needs the `mysql` client on the local machine. The order is the same as `db.sh load`: `marketplace.sql` first, then the three files in `seed/`,
+and finally a check that the database has exactly 23 base tables. It provides the following protections:
 
-- **版本检查**：服务器必须是 MySQL 8.x。MariaDB 会被拒绝，因为 `utf8mb4_0900_ai_ci` 排序规则只有 MySQL 8.x 提供。
-- **不覆盖已有数据**：`seattle_marketplace` 已存在时直接停止，什么都不改；只有加 `--drop-existing` 才会删除重建。
-- **出错即停**：导入中途出错时，脚本以非零状态退出，并提示数据库可能只导入了一部分，需要用 `--drop-existing` 重来。
+- **Version check**: the server must be MySQL 8.x. MariaDB is rejected because the `utf8mb4_0900_ai_ci` collation is available only in MySQL 8.x.
+- **No overwriting existing data**: if `seattle_marketplace` already exists, the script stops and changes nothing; only with `--drop-existing` does it drop and recreate it.
+- **Stop on error**: if an error occurs partway through the import, the script exits with a non-zero status and warns that the database may be only partly imported and must be redone with `--drop-existing`.
 
-脚本只导入，不运行 `queries.sql` 和 `delete_rules.sql`；要测试删除规则，可在导入后用客户端运行 `delete_rules.sql`。
+The script only imports; it does not run `queries.sql` or `delete_rules.sql`. To test the delete rules, run `delete_rules.sql` with a client after the import.
 
-## 停止
+## Stop
 
 ```bash
-# 停止节点，保留数据库数据。
+# Stop the node and keep the database data.
 docker compose stop
 
-# 删除容器与网络，保留数据库数据卷。
+# Remove the container and network and keep the database data volume.
 docker compose down
 ```
