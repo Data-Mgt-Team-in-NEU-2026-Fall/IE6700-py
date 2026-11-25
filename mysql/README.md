@@ -29,7 +29,7 @@
 └── .gitignore
 ```
 
-原件来自 `/home/newbe36524/Downloads/`，原样放在 `archive/`，以只读方式挂载到容器的 `/workspace/archive/`。
+原件来自同学提供的原始 SQL 文件，原样放在 `archive/`，以只读方式挂载到容器的 `/workspace/archive/`。
 `marketplace.sql` 和 `seed/` 同样只读挂载到 `/workspace/`。
 
 ## 合并说明
