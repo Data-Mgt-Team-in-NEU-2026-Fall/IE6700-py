@@ -1,0 +1,18 @@
+{
+  "checks": [
+    "order status does not match item status",
+    "buyer is also the seller",
+    "item with more than one active order",
+    "pending request on an item that is not available",
+    "review on an order that is not completed",
+    "buyer review not written by the seller about the buyer",
+    "seller review not written by the buyer about the seller",
+    "review that is neither buyer nor seller review",
+    "report that is neither item nor order report",
+    "handled report without handler or note, or open report with note",
+    "message written by a non-participant",
+    "conversation without the item seller as participant",
+    "order pickup point is not owned by the order seller",
+    "user e-mail domain differs from the campus domain"
+  ]
+}

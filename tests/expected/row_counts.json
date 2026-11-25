@@ -1,0 +1,28 @@
+{
+  "database": "seattle_marketplace",
+  "tables": {
+    "Address": 10,
+    "BuyerReview": 18,
+    "Campus": 5,
+    "Conversation": 59,
+    "ConversationParticipant": 155,
+    "ItemCategory": 10,
+    "ItemPhoto": 80,
+    "ItemReport": 15,
+    "ItemTag": 5,
+    "ItemTags": 53,
+    "Message": 326,
+    "PickupPoint": 28,
+    "PurchaseRequest": 43,
+    "Report": 30,
+    "Role": 5,
+    "SavedItem": 72,
+    "SecondhandItem": 40,
+    "SellerReview": 15,
+    "TransactionOrder": 29,
+    "TransactionReport": 15,
+    "TransactionReview": 33,
+    "User": 30,
+    "UserHasRole": 45
+  }
+}

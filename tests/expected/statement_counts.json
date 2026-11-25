@@ -1,0 +1,8 @@
+{
+  "marketplace.sql": 25,
+  "seed/01_identity.sql": 5,
+  "seed/02_marketplace.sql": 11,
+  "seed/03_messaging_reviews_reports.sql": 10,
+  "queries.sql": 125,
+  "delete_rules.sql": 51
+}
