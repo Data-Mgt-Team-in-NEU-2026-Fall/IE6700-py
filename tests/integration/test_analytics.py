@@ -9,7 +9,10 @@ import pytest
 
 from ie6700 import db
 from ie6700.analytics import p1_search_and_price as p1
+from ie6700.analytics import p2_seller_report as p2
 from ie6700.analytics import p4_pickup_and_cross_campus as p4
+from ie6700.analytics import p5_messaging_activity as p5
+from ie6700.analytics.common import average
 from ie6700.course import COURSE_SCHEMA
 
 
@@ -156,4 +159,108 @@ def test_p4_ownership_and_activity_are_29_of_29(course_conn):
 def test_p4_does_not_change_the_database(course_conn):
     before = db.table_counts(course_conn, COURSE_SCHEMA)
     p4.report(course_conn, 5)
+    assert db.table_counts(course_conn, COURSE_SCHEMA) == before
+
+
+# ---- P2 (docs/problems/P2-seller-report.md) ----
+
+
+def test_p2_has_23_sellers_and_the_top_three(course_conn):
+    rows = p2.fetch_sellers(course_conn)
+    assert len(rows) == 23
+    assert [(r.sellerId, r.completedOrders, r.revenue) for r in rows[:3]] == [
+        (27, 3, Decimal("70.00")),
+        (29, 2, Decimal("480.00")),
+        (23, 2, Decimal("160.00")),
+    ]
+
+
+def test_p2_seller_27(course_conn):
+    (row,) = p2.fetch_sellers(course_conn, 27)
+    assert (row.items, row.soldItems, row.removedItems) == (3, 3, 0)
+    assert (row.completedOrders, row.revenue) == (3, Decimal("70.00"))
+    assert row.reviews == 1
+    assert p2.average_rating(row) == "1.00"
+    assert p2.sell_through(row) == "100.0%"
+    assert row.pendingRequests == 0
+
+
+def test_p2_seller_29_has_no_reviews(course_conn):
+    (row,) = p2.fetch_sellers(course_conn, 29)
+    assert (row.items, row.soldItems, row.completedOrders, row.revenue) == (2, 2, 2, Decimal("480.00"))
+    assert row.reviews == 0
+    assert p2.average_rating(row) == "-"
+
+
+def test_p2_pending_requests_add_up_to_10(course_conn):
+    assert p2.total_pending(p2.fetch_sellers(course_conn)) == 10
+
+
+def test_p2_revenue_equals_completed_order_sum_per_seller(course_conn):
+    with course_conn.cursor() as cur:
+        cur.execute(
+            "SELECT i.sellerId, SUM(t.agreedPrice) FROM TransactionOrder t "
+            "JOIN PurchaseRequest pr ON pr.purchaseRequestId = t.purchaseRequestId "
+            "JOIN SecondhandItem i ON i.itemId = pr.itemId WHERE t.status = 'COMPLETED' GROUP BY i.sellerId"
+        )
+        expected = {int(s): Decimal(total) for s, total in cur.fetchall()}
+    got = {r.sellerId: r.revenue for r in p2.fetch_sellers(course_conn) if r.completedOrders}
+    assert got == expected
+
+
+def test_p2_unknown_seller_exits_with_status_1(course_conn, capsys):
+    assert p2.fetch_sellers(course_conn, 9999) == []
+    assert p2.report(course_conn, 9999) == 1
+    assert "9999" in capsys.readouterr().err
+
+
+def test_p2_seller_filter_is_bound_not_concatenated(course_conn):
+    assert p2.fetch_sellers(course_conn, "'; DROP TABLE Campus; --") == []  # type: ignore[arg-type]
+    assert "Campus" in db.base_table_names(course_conn, COURSE_SCHEMA)
+
+
+def test_p2_does_not_change_the_database(course_conn):
+    before = db.table_counts(course_conn, COURSE_SCHEMA)
+    p2.report(course_conn, None)
+    assert db.table_counts(course_conn, COURSE_SCHEMA) == before
+
+
+# ---- P5 (docs/problems/P5-messaging-activity.md) ----
+
+
+def test_p5_volume(course_conn):
+    rows = p5.fetch_conversations(course_conn)
+    vol = p5.volume(rows)
+    assert (vol.conversations, vol.messages) == (59, 326)
+    assert average(vol.messages, vol.conversations) == "5.53"
+
+
+def test_p5_all_started_by_buyers_and_none_unanswered(course_conn):
+    rows = p5.fetch_conversations(course_conn)
+    assert not any(r.sellerStarted for r in rows)
+    assert p5.unanswered(rows) == []
+
+
+def test_p5_reply_time_uses_56_conversations(course_conn):
+    rows = p5.fetch_conversations(course_conn)
+    stats = p5.reply_stats(rows)
+    assert stats.count == 56
+    assert average(stats.totalMinutes, stats.count, 1) == "189.0"
+    excluded = {r.conversationId for r in rows} - {r.conversationId for r in p5.reply_rows(rows)}
+    assert excluded == {2, 3, 15}
+
+
+def test_p5_item_filter_returns_only_that_item(course_conn):
+    rows = p5.fetch_conversations(course_conn, 10)
+    assert rows and all(r.itemId == 10 for r in rows)
+
+
+def test_p5_item_is_bound_not_concatenated(course_conn):
+    assert p5.fetch_conversations(course_conn, "'; DROP TABLE Campus; --") == []  # type: ignore[arg-type]
+    assert "Campus" in db.base_table_names(course_conn, COURSE_SCHEMA)
+
+
+def test_p5_does_not_change_the_database(course_conn):
+    before = db.table_counts(course_conn, COURSE_SCHEMA)
+    p5.report(course_conn, None)
     assert db.table_counts(course_conn, COURSE_SCHEMA) == before

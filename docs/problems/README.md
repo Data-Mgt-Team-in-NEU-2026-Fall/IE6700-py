@@ -13,10 +13,10 @@ The assignments are suggestions and can be edited directly in the table below.
 | ID | Problem | Subsystems involved | Owner | Status |
 | --- | --- | --- | --- | --- |
 | [P1](P1-search-and-price.md) | Item search and price overview | Items and discovery | Kun Yu | Not started |
-| [P2](P2-seller-report.md) | Seller performance report | Items, transactions, reviews | Eduardo Gonzalez | Not started |
+| [P2](P2-seller-report.md) | Seller performance report | Items, transactions, reviews | Eduardo Gonzalez | Implemented (in review) |
 | [P3](P3-request-funnel.md) | Purchase request conversion funnel | Purchase requests, orders | Yuan Xia | Not started |
 | [P4](P4-pickup-and-cross-campus.md) | Pickup points and cross-campus transactions | Pickup points, campuses | Kun Yu | Not started |
-| [P5](P5-messaging-activity.md) | Conversation and message activity | Messaging | Eduardo Gonzalez | Not started |
+| [P5](P5-messaging-activity.md) | Conversation and message activity | Messaging | Eduardo Gonzalez | Implemented (in review) |
 | [P6](P6-trust-and-safety.md) | Trust analysis of reviews and reports | Reviews, reports | Yuan Xia | Not started |
 
 ## Requirements Shared by All Problems

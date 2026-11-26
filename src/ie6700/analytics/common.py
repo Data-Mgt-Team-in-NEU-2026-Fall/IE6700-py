@@ -43,6 +43,14 @@ def percent(part: int, whole: int) -> str:
     return f"{share}%"
 
 
+def average(total: Decimal | int, count: int, places: int = 2) -> str:
+    """Format ``total / count`` with ``places`` decimals, or ``-`` when ``count`` is 0."""
+    if count == 0:
+        return "-"
+    value = Decimal(total) / Decimal(count)
+    return str(value.quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP))
+
+
 def print_table(headers: Sequence[str], rows: Sequence[Sequence[Any]]) -> None:
     # disable_numparse keeps pre-formatted values such as "0.00" exactly as written.
     print(tabulate(rows, headers=list(headers), tablefmt="simple", disable_numparse=True))
