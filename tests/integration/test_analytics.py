@@ -10,8 +10,10 @@ import pytest
 from ie6700 import db
 from ie6700.analytics import p1_search_and_price as p1
 from ie6700.analytics import p2_seller_report as p2
+from ie6700.analytics import p3_request_funnel as p3
 from ie6700.analytics import p4_pickup_and_cross_campus as p4
 from ie6700.analytics import p5_messaging_activity as p5
+from ie6700.analytics import p6_trust_and_safety as p6
 from ie6700.analytics.common import average
 from ie6700.course import COURSE_SCHEMA
 
@@ -114,6 +116,110 @@ def test_p1_keyword_is_bound_not_concatenated(course_conn):
 def test_p1_does_not_change_the_database(course_conn):
     before = db.table_counts(course_conn, COURSE_SCHEMA)
     p1.report(course_conn, p1.SearchFilters())
+    assert db.table_counts(course_conn, COURSE_SCHEMA) == before
+
+
+# ---- P3 ----
+
+
+def test_p3_funnel_totals_match_the_brief(course_conn):
+    rows = p3.fetch_funnel(course_conn)
+    assert len(rows) == 11  # 2025-12 to 2026-10
+    assert [r.requestMonth for r in rows] == [
+        "2025-12", "2026-01", "2026-02", "2026-03", "2026-04", "2026-05",
+        "2026-06", "2026-07", "2026-08", "2026-09", "2026-10",
+    ]
+    totals = p3.funnel_totals(rows)
+    assert totals == p3.FunnelTotals(
+        requests=43,
+        acceptedRequests=29,
+        orders=29,
+        completedOrders=23,
+        cancelledOrders=3,
+        pendingOrders=3,
+        daysToOrderSum=23,
+        discountSum=Decimal("2.011766"),
+    )
+    assert p3.average_days(totals.daysToOrderSum, totals.completedOrders) == Decimal("1.00")
+    assert p3.average_discount(totals.discountSum, totals.completedOrders) == Decimal("0.0875")
+
+
+def test_p3_month_rows_match_the_brief(course_conn):
+    rows = {r.requestMonth: r for r in p3.fetch_funnel(course_conn)}
+    february = rows["2026-02"]
+    assert (february.requests, february.orders, february.completedOrders) == (6, 6, 6)
+    september = rows["2026-09"]
+    assert (september.requests, september.acceptedRequests, september.orders) == (3, 2, 2)
+    assert september.completedOrders == 0 and september.cancelledOrders == 2
+    assert september.daysToOrderSum is None and september.discountSum is None
+
+
+def test_p3_month_filter_returns_one_month(course_conn):
+    (row,) = p3.fetch_funnel(course_conn, "2026-02")
+    assert row.requestMonth == "2026-02" and row.requests == 6
+    assert p3.fetch_funnel(course_conn, "2026-11") == []
+
+
+def test_p3_month_filter_is_bound_not_concatenated(course_conn):
+    rows = p3.fetch_funnel(course_conn, "'; DROP TABLE Campus; --")
+    assert rows == []
+    assert "Campus" in db.base_table_names(course_conn, COURSE_SCHEMA)
+
+
+def test_p3_does_not_change_the_database(course_conn):
+    before = db.table_counts(course_conn, COURSE_SCHEMA)
+    p3.report(course_conn, None)
+    assert db.table_counts(course_conn, COURSE_SCHEMA) == before
+
+
+# ---- P6 ----
+
+
+def test_p6_overall_matches_the_brief(course_conn):
+    rows = p6.fetch_user_trust(course_conn)
+    assert len(rows) == 30
+    stats = p6.overall(rows)
+    assert stats == p6.Overall(
+        users=30,
+        activeUsers=28,
+        suspendedUsers=2,
+        reports=30,
+        handledReports=17,
+        handledDaysSum=79,
+        publishedReviews=27,
+        ratingSum=99,
+        flaggedReviews=6,
+        averageRating=Decimal("3.67"),
+        averageHandlingDays=Decimal("4.65"),
+    )
+    assert {r.userId for r in rows if r.accountStatus == "SUSPENDED"} == {25, 26}
+
+
+def test_p6_top_reported_matches_the_brief(course_conn):
+    rows = p6.fetch_user_trust(course_conn)
+    top = p6.top_reported(rows, 5)
+    assert [r.userId for r in top] == [18, 22, 23, 26, 27]
+    assert all(r.reportedCount == 3 for r in top)
+    assert [r for r in top if r.userId == 26][0].accountStatus == "SUSPENDED"
+
+
+def test_p6_users_without_reports_or_reviews_show_zero(course_conn):
+    rows = {r.userId: r for r in p6.fetch_user_trust(course_conn)}
+    assert rows[6] == p6.UserTrustRow(6, "ACTIVE", 0, 0, 0, 0, 0, 0)
+    assert p6.user_average_rating(rows[6]) is None
+    assert p6.user_average_rating(rows[22]) == Decimal("4.33")
+
+
+def test_p6_reported_users_average_higher_than_never_reported(course_conn):
+    rows = p6.fetch_user_trust(course_conn)
+    reported, never_reported = p6.compare_reported(rows)
+    assert reported == p6.RatingGroup(users=8, publishedReviews=11, ratingSum=43, averageRating=Decimal("3.91"))
+    assert never_reported == p6.RatingGroup(users=13, publishedReviews=9, ratingSum=30, averageRating=Decimal("3.33"))
+
+
+def test_p6_does_not_change_the_database(course_conn):
+    before = db.table_counts(course_conn, COURSE_SCHEMA)
+    p6.report(course_conn, 5)
     assert db.table_counts(course_conn, COURSE_SCHEMA) == before
 
 
