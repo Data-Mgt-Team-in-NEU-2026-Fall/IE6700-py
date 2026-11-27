@@ -25,7 +25,7 @@ A single query returns the orders grouped by buyer campus, seller campus, and pi
 - All 29 orders use an active pickup point owned by the item's seller.
 
 ## 5. Acceptance Criteria
-
+    
 - The matrix total, the cross-campus plus same-campus count, and the ownership denominator are all 29.
 - Same-named pickup points stay separate in the Top N table.
 - Ownership result is 29 ÷ 29.
