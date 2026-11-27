@@ -9,8 +9,10 @@ import pytest
 
 from ie6700.analytics import p1_search_and_price as p1
 from ie6700.analytics import p2_seller_report as p2
+from ie6700.analytics import p3_request_funnel as p3
 from ie6700.analytics import p4_pickup_and_cross_campus as p4
 from ie6700.analytics import p5_messaging_activity as p5
+from ie6700.analytics import p6_trust_and_safety as p6
 from ie6700.analytics.common import InvalidInput, average, money, percent
 
 
@@ -139,8 +141,10 @@ def test_p4_empty_groups_give_zero_totals():
 
 def test_each_module_runs_exactly_one_query():
     assert p1.SEARCH_SQL.lstrip().upper().startswith("WITH") and ";" not in p1.SEARCH_SQL
+    assert p3.FUNNEL_SQL.lstrip().upper().startswith("SELECT") and ";" not in p3.FUNNEL_SQL
     assert p4.ORDER_GROUPS_SQL.lstrip().upper().startswith("WITH") and ";" not in p4.ORDER_GROUPS_SQL
-    for sql in (p1.SEARCH_SQL, p4.ORDER_GROUPS_SQL):
+    assert p6.TRUST_SQL.lstrip().upper().startswith("WITH") and ";" not in p6.TRUST_SQL
+    for sql in (p1.SEARCH_SQL, p3.FUNNEL_SQL, p4.ORDER_GROUPS_SQL, p6.TRUST_SQL):
         assert not any(word in sql.upper() for word in ("INSERT ", "UPDATE ", "DELETE ", "DROP "))
 
 
@@ -226,3 +230,128 @@ def test_p2_p5_each_run_exactly_one_read_only_query():
     for sql in (p2.SELLER_SQL, p5.CONVERSATION_SQL):
         assert sql.lstrip().upper().startswith(("WITH", "SELECT")) and ";" not in sql
         assert not any(word in sql.upper() for word in ("INSERT ", "UPDATE ", "DELETE ", "DROP "))
+
+
+# ---- P3 ----
+
+
+def _month(month, requests, accepted, orders, completed, cancelled, days, discount):
+    return p3.MonthRow(month, requests, accepted, orders, completed, cancelled, days, discount)
+
+
+def test_p3_month_validation_accepts_yyyy_mm_and_rejects_the_rest():
+    assert p3.validate_month("2026-02") == "2026-02"
+    for bad in ("2026-13", "2026-2", "26-02", "2026/02", "February"):
+        with pytest.raises(InvalidInput):
+            p3.validate_month(bad)
+
+
+def test_p3_cli_exits_with_usage_status_for_an_invalid_month(capsys):
+    status = p3.main(["--month", "2026-13"])
+    assert status == 2
+    assert "error: not a month" in capsys.readouterr().err
+
+
+def test_p3_funnel_totals_add_months_and_derive_pending():
+    rows = [
+        _month("2026-02", 6, 6, 6, 6, 0, 6, Decimal("0.475")),
+        _month("2026-09", 3, 2, 2, 0, 2, None, None),
+        _month("2026-10", 8, 8, 8, 4, 1, 4, Decimal("0.233766")),
+    ]
+    totals = p3.funnel_totals(rows)
+    assert totals == p3.FunnelTotals(
+        requests=17,
+        acceptedRequests=16,
+        orders=16,
+        completedOrders=10,
+        cancelledOrders=3,
+        pendingOrders=3,
+        daysToOrderSum=10,
+        discountSum=Decimal("0.708766"),
+    )
+    assert p3.average_days(totals.daysToOrderSum, totals.completedOrders) == Decimal("1.00")
+    assert p3.average_discount(totals.discountSum, totals.completedOrders) == Decimal("0.0709")
+
+
+def test_p3_month_with_no_completed_orders_has_no_averages():
+    (row,) = [_month("2026-09", 3, 2, 2, 0, 2, None, None)]
+    assert p3.average_days(row.daysToOrderSum or 0, row.completedOrders) is None
+    assert p3.average_discount(row.discountSum or Decimal(0), row.completedOrders) is None
+
+
+def test_p3_empty_rows_give_zero_totals():
+    assert p3.funnel_totals([]) == p3.FunnelTotals(0, 0, 0, 0, 0, 0, 0, Decimal(0))
+    assert p3.average_days(0, 0) is None
+    assert p3.average_discount(Decimal(0), 0) is None
+
+
+# ---- P6 ----
+
+
+def _user(user_id, status, reported, handled, days, published, rating, flagged):
+    return p6.UserTrustRow(user_id, status, reported, handled, days, published, rating, flagged)
+
+
+def test_p6_overall_rolls_rows_up():
+    rows = [
+        _user(18, "ACTIVE", 3, 2, 9, 2, 8, 0),
+        _user(22, "ACTIVE", 3, 2, 9, 3, 13, 1),
+        _user(26, "SUSPENDED", 3, 1, 4, 1, 2, 0),
+        _user(3, "ACTIVE", 2, 1, 2, 0, 0, 1),
+        _user(4, "ACTIVE", 0, 0, 0, 3, 10, 0),
+        _user(6, "ACTIVE", 0, 0, 0, 0, 0, 0),
+    ]
+    stats = p6.overall(rows)
+    assert stats == p6.Overall(
+        users=6,
+        activeUsers=5,
+        suspendedUsers=1,
+        reports=11,
+        handledReports=6,
+        handledDaysSum=24,
+        publishedReviews=9,
+        ratingSum=33,
+        flaggedReviews=2,
+        averageRating=Decimal("3.67"),
+        averageHandlingDays=Decimal("4.00"),
+    )
+
+
+def test_p6_user_average_rating_is_dash_without_published_reviews():
+    assert p6.user_average_rating(_user(18, "ACTIVE", 3, 2, 9, 2, 8, 0)) == Decimal("4.00")
+    assert p6.user_average_rating(_user(6, "ACTIVE", 0, 0, 0, 0, 0, 0)) is None
+
+
+def test_p6_top_reported_breaks_ties_by_user_id():
+    rows = [
+        _user(27, "ACTIVE", 3, 2, 7, 2, 6, 1),
+        _user(18, "ACTIVE", 3, 2, 9, 2, 8, 0),
+        _user(3, "ACTIVE", 2, 1, 2, 0, 0, 1),
+    ]
+    assert [r.userId for r in p6.top_reported(rows, limit=2)] == [18, 27]
+    assert [r.userId for r in p6.top_reported(rows, limit=1)] == [18]
+
+
+def test_p6_compare_reported_against_never_reported():
+    rows = [
+        _user(18, "ACTIVE", 3, 2, 9, 2, 8, 0),
+        _user(22, "ACTIVE", 3, 2, 9, 3, 13, 1),
+        _user(26, "SUSPENDED", 3, 1, 4, 1, 2, 0),
+        _user(3, "ACTIVE", 2, 1, 2, 0, 0, 1),
+        _user(4, "ACTIVE", 0, 0, 0, 3, 10, 0),
+        _user(6, "ACTIVE", 0, 0, 0, 0, 0, 0),
+    ]
+    reported, never_reported = p6.compare_reported(rows)
+    assert reported == p6.RatingGroup(users=4, publishedReviews=6, ratingSum=23, averageRating=Decimal("3.83"))
+    assert never_reported == p6.RatingGroup(users=2, publishedReviews=3, ratingSum=10, averageRating=Decimal("3.33"))
+
+
+def test_p6_empty_rows_give_zero_totals_and_no_averages():
+    stats = p6.overall([])
+    assert stats.users == 0 and stats.reports == 0 and stats.publishedReviews == 0
+    assert stats.averageRating is None and stats.averageHandlingDays is None
+    assert p6.top_reported([]) == []
+    assert p6.compare_reported([]) == (
+        p6.RatingGroup(0, 0, 0, None),
+        p6.RatingGroup(0, 0, 0, None),
+    )
