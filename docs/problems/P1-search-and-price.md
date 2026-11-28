@@ -1,7 +1,7 @@
 # P1 Item Search and Price Overview
 
 - **Owner**: Kun Yu (suggested, can be changed)
-- **Status**: Not started
+- **Status**: Implemented
 
 ## 1. Business Question
 

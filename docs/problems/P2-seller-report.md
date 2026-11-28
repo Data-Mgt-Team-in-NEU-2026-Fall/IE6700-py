@@ -1,7 +1,7 @@
 # P2 Seller Performance Report
 
 - **Owner**: Eduardo Gonzalez (suggested, can be changed)
-- **Status**: Implemented (in review)
+- **Status**: Implemented
 
 ## 1. Business Question
 

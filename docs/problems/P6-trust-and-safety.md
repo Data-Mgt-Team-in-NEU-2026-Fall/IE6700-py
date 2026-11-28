@@ -1,7 +1,7 @@
 # P6 Trust Analysis of Reviews and Reports
 
 - **Owner**: Yuan Xia (suggested, can be changed)
-- **Status**: Implemented (in review)
+- **Status**: Implemented
 
 ## 1. Business Question
 
