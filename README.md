@@ -95,6 +95,10 @@ Exit status: `0` success, `1` a database, SQL or verification failure, `2` a usa
 
 The SQL files under `mysql/` are read only. The commands never change them.
 
+## Prompts
+
+`Prompts/` holds the prompts and the OpenSpec documents (proposal, design, specs, tasks) that were used to generate the structure of this application. See `Prompts/README.md`. It is a record only; the application does not use it.
+
 ## Troubleshooting
 
 - **`DATABASE_URL is not set`** (exit 2): copy `.env.example` to `.env`, or set the `DATABASE_URL` environment variable.
